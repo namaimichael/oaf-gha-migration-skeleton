@@ -2,6 +2,7 @@ name: service-ci
 on:
   pull_request:
   push: { branches: [ "main" ] }
+
 jobs:
   call-ci-template:
     uses: ./.github/workflows/_templates/ci-node.yml
