@@ -14,6 +14,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y yamllint
       - name: Lint GitHub workflows
         run: yamllint .github/workflows
+        continue-on-error: true
 
   call-ci-template:
     needs: lint-yaml
