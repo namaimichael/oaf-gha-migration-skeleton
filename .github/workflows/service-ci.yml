@@ -1,8 +1,9 @@
+# .github/workflows/service-ci.yml
 name: service-ci
 on:
   pull_request:
   push:
-    branches: [ "main" ]
+    branches: [ "dev", "staging", "main" ]
   workflow_dispatch: {}
 
 jobs:
@@ -10,12 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install yamllint
-        run: sudo apt-get update && sudo apt-get install -y yamllint
-      - name: Lint GitHub workflows
-        run: yamllint .github/workflows
-        continue-on-error: true
-
+      - run: sudo apt-get update && sudo apt-get install -y yamllint
+      - run: yamllint .github/workflows
   call-ci-template:
     needs: lint-yaml
     permissions:

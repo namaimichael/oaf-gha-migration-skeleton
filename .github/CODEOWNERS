@@ -1,2 +1,8 @@
-.github/workflows/*  @platform-team @security-team
-.github/actions/*    @platform-team
+# Workflows guarded by Platform + Security
+.github/workflows/*   @platform-team @security-team
+
+# Charts and infra deployment guarded by Platform
+deploy/**              @platform-team
+
+# Service code owned by App Team
+src/**                 @app-team
