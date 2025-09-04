@@ -1,0 +1,12 @@
+extends: default
+rules:
+  truthy: disable
+  document-start: disable
+  comments-indentation: disable
+  line-length:
+    max: 140
+    allow-non-breakable-words: true
+    allow-non-breakable-inline-mappings: true
+  indentation:
+    indent-sequences: consistent
+    check-multi-line-strings: false

@@ -10,14 +10,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Install yamllint
         run: sudo apt-get update && sudo apt-get install -y yamllint
-
       - name: Lint GitHub workflows (advisory)
         run: yamllint -f parsable .github/workflows
-        continue-on-error: true  # prints issues but doesn't fail the job
-
+        continue-on-error: true
       - name: YAML syntax sanity (strict, must pass)
         run: |
           yamllint \
