@@ -9,16 +9,41 @@ jobs:
       security-events: write
       id-token: write
       packages: write
+
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with: { node-version: '18' }
 
-      - run: npm ci
-      - run: npm test -- --ci
+      # Detect Node lockfile
+      - name: Detect Node lockfile
+        id: node
+        run: |
+          if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            echo "has_lock=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_lock=false" >> $GITHUB_OUTPUT
+          fi
 
-      # === DEMO path: push to GHCR (no cloud creds) ===
+      # Only run npm in real Node projects
+      - name: npm ci
+        if: ${{ steps.node.outputs.has_lock == 'true' }}
+        run: npm ci
+
+      - name: npm test
+        if: ${{ steps.node.outputs.has_lock == 'true' }}
+        run: npm test -- --ci
+
+      # DEMO: create a minimal Dockerfile if none exists
+      - name: Ensure Dockerfile exists (demo)
+        if: ${{ hashFiles('Dockerfile') == '' }}
+        run: |
+          cat > Dockerfile <<'EOF'
+          FROM busybox:latest
+          CMD ["echo","demo image built by CI"]
+          EOF
+
+      # DEMO path: push to GHCR (no cloud creds)
       - name: Login to GHCR (demo)
         if: ${{ vars.DEMO_MODE == 'true' }}
         uses: docker/login-action@v3
@@ -35,7 +60,7 @@ jobs:
           push: true
           tags: ${{ vars.IMAGE_REPO }}:${{ github.run_number }}
 
-      # === REAL path: push to ACR (requires Azure OIDC) ===
+      # REAL path: push to ACR (requires Azure OIDC)
       - name: Azure login (real)
         if: ${{ vars.DEMO_MODE != 'true' }}
         uses: azure/login@v2
