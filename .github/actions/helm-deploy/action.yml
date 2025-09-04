@@ -1,0 +1,9 @@
+name: Helm Deploy
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: az aks get-credentials -g "$AKS_RG" -n "$AKS_NAME" --overwrite-existing
+    - shell: bash
+      run: |
+        helm upgrade --install "$APP" "$CHART_PATH"           --set image.repository="$IMAGE_REPO"           --set image.tag="$IMAGE_TAG"
