@@ -7,11 +7,12 @@ on:
         options: [ "staging", "production" ]
         required: true
         default: "staging"
+
 jobs:
   call-deploy-template:
-    uses: ./.github/workflows/_templates/deploy-aks-helm.yml
+    uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/_templates/deploy-aks-helm.yml@main
     with:
-      env_name: ${{ inputs.env_name }}
-      image_repo: ${{ vars.ACR_NAME }}.azurecr.io/app
-      image_tag: ${{ github.run_number }}
+      env_name:  ${{ inputs.env_name }}
+      image_repo: ${{ vars.IMAGE_REPO }}
+      image_tag:  ${{ github.run_number }}
       chart_path: deploy/chart
