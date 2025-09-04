@@ -2,8 +2,14 @@ name: service-ci
 on:
   pull_request:
   push: { branches: [ "main" ] }
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 jobs:
   call-ci-template:
+    # 👇 give the called workflow the scopes it needs
+    permissions:
+      contents: read
+      packages: write          # for GHCR push
+      security-events: write   # for CodeQL upload
+      id-token: write          # for OIDC (real path)
     uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/ci-node.yml@main
