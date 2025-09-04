@@ -12,9 +12,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install yamllint
         run: sudo apt-get update && sudo apt-get install -y yamllint
-      - name: Lint GitHub workflows
-        run: yamllint .github/workflows
-        continue-on-error: true
+      - name: Lint GitHub workflows (verbose)
+        run: |
+          yamllint -f parsable \
+            -d "{extends: default, rules: {line-length: {max: 140, allow-non-breakable-words: true, allow-non-breakable-inline-mappings: true}, truthy: disable, document-start: disable, comments-indentation: disable, indentation: {indent-sequences: consistent, check-multi-line-strings: false}}}" \
+            .github/workflows
 
   call-ci-template:
     needs: lint-yaml
