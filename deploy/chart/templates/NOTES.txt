@@ -1,0 +1,2 @@
+1. This is a tiny chart for demos.
+2. The image repository and tag are injected by the workflow.
