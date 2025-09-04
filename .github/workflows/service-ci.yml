@@ -5,4 +5,4 @@ on:
 
 jobs:
   call-ci-template:
-    uses: ./.github/workflows/_templates/ci-node.yml
+    uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/_templates/ci-node.yml@main
