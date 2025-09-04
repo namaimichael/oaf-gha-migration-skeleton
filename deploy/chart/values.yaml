@@ -1,0 +1,10 @@
+replicaCount: 1
+
+image:
+  repository: CHANGEME_IMAGE_REPO
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
