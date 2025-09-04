@@ -2,8 +2,8 @@ name: service-ci
 on:
   pull_request:
   push: { branches: [ "main" ] }
-  workflow_dispatch: 
+  workflow_dispatch:
 
 jobs:
   call-ci-template:
-    uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/_templates/ci-node.yml@main
+    uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/ci-node.yml@main
