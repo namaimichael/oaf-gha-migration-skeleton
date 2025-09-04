@@ -3,10 +3,10 @@ name: _deploy-aks-helm (template)
 on:
   workflow_call:
     inputs:
-      env_name:   { type: string, required: true }
-      image_repo: { type: string, required: true }
-      image_tag:  { type: string, required: true }
-      chart_path: { type: string, required: true }
+      env_name: {type: string, required: true}
+      image_repo: {type: string, required: true}
+      image_tag: {type: string, required: true}
+      chart_path: {type: string, required: true}
 
 jobs:
   deploy:

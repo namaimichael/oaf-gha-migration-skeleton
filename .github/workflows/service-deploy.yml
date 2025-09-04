@@ -1,32 +1,37 @@
-# .github/workflows/service-deploy.yml
 name: service-deploy
+
 on:
   push:
-    branches: [ "dev" ]   # auto-deploy DEV
+    branches: ["dev"]  # auto-deploy DEV
   workflow_dispatch:
     inputs:
       env_name:
         type: choice
-        options: [ "dev", "staging", "production" ]
+        options: ["dev","staging","production"]
+        required: true
         default: "dev"
 
 jobs:
   auto-deploy-dev:
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    permissions: { contents: read, id-token: write }
+    permissions:
+      contents: read
+      id-token: write
     uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/deploy-aks-helm.yml@main
     with:
-      env_name:  dev
+      env_name: dev
       image_repo: ${{ vars.IMAGE_REPO }}
-      image_tag:  ${{ github.run_number }}
+      image_tag: ${{ github.run_number }}
       chart_path: deploy/chart
 
   manual-deploy:
     if: github.event_name == 'workflow_dispatch'
-    permissions: { contents: read, id-token: write }
+    permissions:
+      contents: read
+      id-token: write
     uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/deploy-aks-helm.yml@main
     with:
-      env_name:  ${{ inputs.env_name }}
+      env_name: ${{ inputs.env_name }}
       image_repo: ${{ vars.IMAGE_REPO }}
-      image_tag:  ${{ github.run_number }}
+      image_tag: ${{ github.run_number }}
       chart_path: deploy/chart

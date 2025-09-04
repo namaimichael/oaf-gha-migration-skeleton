@@ -1,11 +1,10 @@
-# .github/workflows/codeql.yml
-name: "CodeQL"
+name: CodeQL
 
 on:
   push:
-    branches: [ "dev", "staging", "main" ]
+    branches: ["dev","staging","main"]
   pull_request:
-    branches: [ "dev", "staging", "main" ]
+    branches: ["dev","staging","main"]
   schedule:
     - cron: '30 1 * * 1'
 
@@ -21,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [ 'javascript' ]   # adjust to your codebase
+        language: ['javascript']  # adjust to your stack
 
     steps:
       - name: Checkout repository

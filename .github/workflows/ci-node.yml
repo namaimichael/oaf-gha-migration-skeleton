@@ -1,5 +1,5 @@
 name: _ci-node (template)
-on: { workflow_call: {} }
+on: {workflow_call: {}}
 
 jobs:
   ci:
@@ -12,8 +12,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
-        with: { node-version: '18' }
+        with:
+          node-version: '18'
 
       # Detect Node lockfile
       - name: Detect Node lockfile
@@ -25,7 +27,6 @@ jobs:
             echo "has_lock=false" >> $GITHUB_OUTPUT
           fi
 
-      # Only run npm in real Node projects
       - name: npm ci
         if: ${{ steps.node.outputs.has_lock == 'true' }}
         run: npm ci
