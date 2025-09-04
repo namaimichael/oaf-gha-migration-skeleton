@@ -10,7 +10,7 @@ on:
 
 jobs:
   call-deploy-template:
-    uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/_templates/deploy-aks-helm.yml@main
+    uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/deploy-aks-helm.yml@main
     with:
       env_name:  ${{ inputs.env_name }}
       image_repo: ${{ vars.IMAGE_REPO }}
