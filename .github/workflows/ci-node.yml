@@ -1,43 +1,93 @@
-name: CodeQL
+name: _ci-node (template)
 
 on:
-  pull_request:
-    branches: ["dev", "staging", "main"]
-  push:
-    branches: ["dev", "staging", "main"]
-  schedule:
-    - cron: "0 2 * * 0"  # weekly, Sunday 02:00 UTC
-
-permissions:
-  contents: read
-  security-events: write
+  workflow_call:
 
 concurrency:
-  group: codeql-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  analyze:
-    name: Analyze (javascript)
+  ci:
+    name: ci
     runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        language: ["javascript"] # add more later: ["javascript","python","java",...]
+    timeout-minutes: 15
+    # NOTE: no job-level permissions here so the caller controls scope
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          languages: ${{ matrix.language }}
+          node-version: '18'
+          cache: npm
+          # cache-dependency-path: package-lock.json
 
-      # Optional for JS, but recommended in the official template
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+      - name: Detect Node lockfile
+        id: node
+        run: |
+          if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            echo "has_lock=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_lock=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Analyze
-        uses: github/codeql-action/analyze@v3
+      - name: Install (npm ci)
+        if: ${{ steps.node.outputs.has_lock == 'true' }}
+        run: npm ci
+
+      - name: Test
+        if: ${{ steps.node.outputs.has_lock == 'true' }}
+        run: npm test -- --ci
+
+      # ---------- GHCR demo path ----------
+      - name: Login to GHCR (demo)
+        if: ${{ vars.DEMO_MODE == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Ensure Dockerfile exists (demo)
+        if: ${{ vars.DEMO_MODE == 'true' && hashFiles('Dockerfile') == '' }}
+        run: |
+          cat > Dockerfile <<'EOF'
+          FROM busybox:latest
+          CMD ["echo","demo image built by CI"]
+          EOF
+
+      - name: Build & push (GHCR demo)
+        if: ${{ vars.DEMO_MODE == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/oaf-gha-migration-skeleton:${{ github.run_number }}
+
+      # ---------- Real ACR path ----------
+      - name: Azure login (real)
+        if: ${{ vars.DEMO_MODE != 'true' }}
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Docker login to ACR (real)
+        if: ${{ vars.DEMO_MODE != 'true' }}
+        uses: azure/docker-login@v2
+        with:
+          login-server: ${{ vars.ACR_NAME }}.azurecr.io
+
+      - name: Build & push (ACR real)
+        if: ${{ vars.DEMO_MODE != 'true' }}
+        uses: docker/build-push-action@v6
+        env:
+          ACR_NAME: ${{ vars.ACR_NAME }}
+        with:
+          context: .
+          push: true
+          tags: ${{ env.ACR_NAME }}.azurecr.io/app:${{ github.run_number }}
