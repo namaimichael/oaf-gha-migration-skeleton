@@ -1,26 +1,22 @@
 name: service-ci
 on:
   pull_request:
-  push:
     branches: ["dev","staging","main"]
-  workflow_dispatch: {}
 
 jobs:
   lint-yaml:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install yamllint
-        run: sudo apt-get update && sudo apt-get install -y yamllint
+      - run: sudo apt-get update && sudo apt-get install -y yamllint
       - name: Lint GitHub workflows (advisory)
         run: yamllint -f parsable .github/workflows
         continue-on-error: true
-      - name: YAML syntax sanity (strict, must pass)
+      - name: YAML syntax sanity (strict)
         run: |
           yamllint \
             -d '{rules: {document-start: disable, line-length: disable, truthy: disable, comments: disable, indentation: {indent-sequences: consistent}}}' \
-            -f parsable \
-            .github/workflows
+            -f parsable .github/workflows
 
   call-ci-template:
     needs: lint-yaml

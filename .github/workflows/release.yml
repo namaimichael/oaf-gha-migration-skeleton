@@ -1,18 +1,14 @@
 name: release-notes
 on:
   push:
-    tags:
-      - "v*"
+    tags: ["v*"]
 
 jobs:
   generate:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    permissions: { contents: write }
     steps:
       - uses: actions/checkout@v4
-
-      # Create the GitHub Release with auto-generated notes
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
