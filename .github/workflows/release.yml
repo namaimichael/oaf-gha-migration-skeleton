@@ -11,14 +11,11 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Build release notes from merged PRs
-        id: notes
-        uses: juliangruber/merge-release-notes-action@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Create the GitHub Release with auto-generated notes
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
-          body: ${{ steps.notes.outputs.notes }}
+          generate_release_notes: true
