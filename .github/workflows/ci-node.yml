@@ -1,21 +1,27 @@
 name: _ci-node (template)
-on: {workflow_call: {}}
+
+on:
+  workflow_call:
+
+# deny-by-default; callers can escalate if needed
+permissions:
+  contents: read
 
 jobs:
   ci:
+    name: ci
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-      id-token: write
-      packages: write
+    timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
+          cache: npm
 
       - name: Detect Node lockfile
         id: node
@@ -26,22 +32,15 @@ jobs:
             echo "has_lock=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: npm ci
+      - name: Install (npm ci)
         if: ${{ steps.node.outputs.has_lock == 'true' }}
         run: npm ci
 
-      - name: npm test
+      - name: Test
         if: ${{ steps.node.outputs.has_lock == 'true' }}
         run: npm test -- --ci
 
-      - name: Ensure Dockerfile exists (demo)
-        if: ${{ hashFiles('Dockerfile') == '' }}
-        run: |
-          cat > Dockerfile <<'EOF'
-          FROM busybox:latest
-          CMD ["echo","demo image built by CI"]
-          EOF
-
+      # ----- Demo path: push to GHCR (no cloud creds required) -----
       - name: Login to GHCR (demo)
         if: ${{ vars.DEMO_MODE == 'true' }}
         uses: docker/login-action@v3
@@ -49,6 +48,14 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Ensure Dockerfile exists (demo)
+        if: ${{ vars.DEMO_MODE == 'true' && hashFiles('Dockerfile') == '' }}
+        run: |
+          cat > Dockerfile <<'EOF'
+          FROM busybox:latest
+          CMD ["echo","demo image built by CI"]
+          EOF
 
       - name: Build & push (GHCR demo)
         if: ${{ vars.DEMO_MODE == 'true' }}
@@ -58,6 +65,7 @@ jobs:
           push: true
           tags: ${{ vars.IMAGE_REPO }}:${{ github.run_number }}
 
+      # ----- Real path: push to ACR (uses Azure OIDC) -----
       - name: Azure login (real)
         if: ${{ vars.DEMO_MODE != 'true' }}
         uses: azure/login@v2
