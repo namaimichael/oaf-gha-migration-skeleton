@@ -30,6 +30,7 @@ jobs:
             .github/workflows
 
   call-ci-template:
+    # this job name will appear as: service-ci / call-ci-template / ci (pull_request)
     needs: lint-yaml
     uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/ci-node.yml@main
     permissions:               # 👈 match what the reusable job requests
@@ -37,3 +38,4 @@ jobs:
       packages: write
       id-token: write
       security-events: write
+
