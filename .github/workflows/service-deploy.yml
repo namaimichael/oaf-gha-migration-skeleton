@@ -1,22 +1,20 @@
 name: service-deploy
-
 on:
   push:
-    branches: ["dev"]  # auto-deploy DEV
+    branches: ["dev","staging","main"]   # deployments are tied to actual branch updates
   workflow_dispatch:
     inputs:
       env_name:
         type: choice
         options: ["dev","staging","production"]
-        required: true
         default: "dev"
+        required: true
 
 jobs:
+  # Auto deploy when code lands on dev
   auto-deploy-dev:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    permissions:
-      contents: read
-      id-token: write
+    if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
+    permissions: { contents: read, id-token: write }
     uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/deploy-aks-helm.yml@main
     with:
       env_name: dev
@@ -24,11 +22,10 @@ jobs:
       image_tag: ${{ github.run_number }}
       chart_path: deploy/chart
 
+  # Manual dispatch can target any environment (for on-demand demos)
   manual-deploy:
     if: github.event_name == 'workflow_dispatch'
-    permissions:
-      contents: read
-      id-token: write
+    permissions: { contents: read, id-token: write }
     uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/deploy-aks-helm.yml@main
     with:
       env_name: ${{ inputs.env_name }}
