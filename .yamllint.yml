@@ -1,14 +1,12 @@
 extends: default
-
 rules:
-  # keep it friendly for GitHub Actions YAML
+  truthy: disable
+  document-start: disable
+  comments-indentation: disable
   line-length:
     max: 140
     allow-non-breakable-words: true
     allow-non-breakable-inline-mappings: true
-  truthy: disable                # allows "on: push" etc
-  document-start: disable        # no need for '---' at file start
-  comments-indentation: disable
   indentation:
     indent-sequences: consistent
     check-multi-line-strings: false

@@ -3,10 +3,10 @@ name: _deploy-aks-helm (template)
 on:
   workflow_call:
     inputs:
-      env_name:   { type: string, required: true }
-      image_repo: { type: string, required: true }
-      image_tag:  { type: string, required: true }
-      chart_path: { type: string, required: true }
+      env_name: {type: string, required: true}
+      image_repo: {type: string, required: true}
+      image_tag: {type: string, required: true}
+      chart_path: {type: string, required: true}
 
 jobs:
   deploy:
@@ -16,7 +16,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # DEMO path: Helm lint/template only (no Azure)
       - name: Helm lint (demo)
         if: ${{ vars.DEMO_MODE == 'true' }}
         run: |
@@ -31,7 +30,6 @@ jobs:
             --set image.tag=${{ inputs.image_tag }} \
             | head -n 60
 
-      # REAL path: AKS login + Helm upgrade
       - name: Azure login (real)
         if: ${{ vars.DEMO_MODE != 'true' }}
         uses: azure/login@v2
@@ -42,7 +40,7 @@ jobs:
 
       - name: AKS credentials (real)
         if: ${{ vars.DEMO_MODE != 'true' }}
-        run: az aks get-credentials -g $AKS_RG -n $AKS_NAME --overwrite-existing
+        run: az aks get-credentials -g "$AKS_RG" -n "$AKS_NAME" --overwrite-existing
 
       - name: Setup Helm (real)
         if: ${{ vars.DEMO_MODE != 'true' }}
