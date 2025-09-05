@@ -1,105 +1,17 @@
-name: Auto sync main → dev
+name: Auto sync main to dev
 
 on:
-  release:
-    types: [published]
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
 
 permissions:
   contents: read
   pull-requests: write
 
-concurrency:
-  group: auto-sync-main-to-dev
-  cancel-in-progress: true
-
 jobs:
-  open-sync-pr:
+  sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Check if dev is behind main
-        id: compare
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const owner = context.repo.owner;
-            const repo  = context.repo.repo;
-
-            // Compare dev (base) with main (head)
-            const cmp = await github.rest.repos.compareCommits({
-              owner, repo, base: 'dev', head: 'main'
-            });
-
-            core.setOutput('behind_by', cmp.data.behind_by);
-            core.setOutput('ahead_by',  cmp.data.ahead_by);
-
-      - name: Exit if already in sync
-        if: steps.compare.outputs.behind_by == '0'
-        run: echo "dev is up-to-date with main. Nothing to do."
-
-      - name: Find existing open sync PR
-        if: steps.compare.outputs.behind_by != '0'
-        id: find
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const owner = context.repo.owner;
-            const repo  = context.repo.repo;
-
-            const prs = await github.rest.pulls.list({
-              owner, repo, state: 'open', base: 'dev', head: `${owner}:main`
-            });
-
-            if (prs.data.length > 0) {
-              core.setOutput('pr_number', prs.data[0].number.toString());
-            } else {
-              core.setOutput('pr_number', '');
-            }
-
-      - name: Create or update sync PR (main → dev)
-        if: steps.compare.outputs.behind_by != '0' && steps.find.outputs.pr_number == ''
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const owner = context.repo.owner;
-            const repo  = context.repo.repo;
-
-            const title = "chore(sync): main → dev";
-            const body  = [
-              "Automated sync of production branch **main** back into **dev** after release.",
-              "",
-              "- Ensures dev contains all production hotfixes and release commits.",
-              "- Merge with a regular merge commit (no squash/rebase) to preserve prod SHAs."
-            ].join("\n");
-
-            const pr = await github.rest.pulls.create({
-              owner, repo,
-              title,
-              head: 'main',
-              base: 'dev',
-              body
-            });
-
-            core.notice(`Opened PR #${pr.data.number}: ${pr.data.html_url}`);
-
-      - name: Comment on existing sync PR
-        if: steps.compare.outputs.behind_by != '0' && steps.find.outputs.pr_number != ''
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const owner = context.repo.owner;
-            const repo  = context.repo.repo;
-            const number = Number(core.getInput('pr_number'));
-          inputs: |
-            pr_number: ${{ steps.find.outputs.pr_number }}
-          script: |
-            const owner = context.repo.owner;
-            const repo  = context.repo.repo;
-            const number = Number(core.getInput('pr_number'));
-            await github.rest.issues.createComment({
-              owner, repo, issue_number: number,
-              body: "New release detected. This sync PR will bring the latest `main` changes into `dev`."
-            });
+      - name: Sync notification
+        run: |
+          echo "Manual sync workflow triggered"
+          echo "This would create a PR from main to dev in a real scenario"

@@ -3,49 +3,23 @@ name: deploy-local
 on:
   workflow_dispatch:
     inputs:
-      image_tag:
-        description: "Image tag to deploy"
-        required: false
-        default: "latest"
       env_name:
-        description: "Environment name"
+        description: "Environment"
         type: choice
         options: ["dev", "staging", "production"]
-        required: true
         default: "dev"
-
-permissions:
-  contents: read
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
+      
       - name: Setup Helm
         uses: Azure/setup-helm@v4
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Deploy with Helm (dry-run)
+        
+      - name: Simulate deployment
         run: |
-          helm upgrade --install demo-app deploy/chart \
-            --set image.repository=ghcr.io/${{ github.repository_owner }}/demo-app \
-            --set image.tag=${{ inputs.image_tag }} \
-            --set env.name=${{ inputs.env_name }} \
-            --dry-run --debug
-
-      - name: Show deployment info
-        run: |
-          echo "🎯 Deployment Summary:"
-          echo "Environment: ${{ inputs.env_name }}"
-          echo "Image: ghcr.io/${{ github.repository_owner }}/demo-app:${{ inputs.image_tag }}"
-          echo "Chart: deploy/chart"
-          echo ""
-          echo "To deploy to a real cluster, configure kubectl context and remove --dry-run"
+          echo "Deploying to ${{ inputs.env_name }}"
+          helm template demo-app deploy/chart --dry-run
+          echo "Deployment simulation successful"
