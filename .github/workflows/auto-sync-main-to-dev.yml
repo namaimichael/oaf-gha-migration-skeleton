@@ -1,17 +1,50 @@
-name: Auto sync main to dev
+name: Auto sync main → dev
 
 on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
   contents: read
   pull-requests: write
 
+concurrency:
+  group: auto-sync-main-to-dev
+  cancel-in-progress: true
+
 jobs:
-  sync:
+  open-sync-pr:
     runs-on: ubuntu-latest
     steps:
-      - name: Sync notification
-        run: |
-          echo "Manual sync workflow triggered"
-          echo "This would create a PR from main to dev in a real scenario"
+      - name: Compare branches
+        id: compare
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const cmp = await github.rest.repos.compareCommits({ owner, repo, base: 'dev', head: 'main' });
+            core.setOutput('behind_by', String(cmp.data.behind_by));
+
+      - name: Open PR if dev is behind
+        if: steps.compare.outputs.behind_by != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const prs = await github.rest.pulls.list({ owner, repo, state: 'open', base: 'dev', head: `${owner}:main` });
+            if (prs.data.length) {
+              core.notice(`Sync PR already open: #${prs.data[0].number}`);
+              return;
+            }
+            const pr = await github.rest.pulls.create({
+              owner, repo,
+              title: 'chore(sync): main → dev',
+              head: 'main',
+              base: 'dev',
+              body: 'Automated sync of production branch **main** back into **dev** after release.',
+            });
+            core.notice(`Opened PR #${pr.data.number}`);
