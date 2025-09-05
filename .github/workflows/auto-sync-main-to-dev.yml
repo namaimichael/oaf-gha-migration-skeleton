@@ -2,49 +2,119 @@ name: Auto sync main → dev
 
 on:
   release:
-    types: [published]
+    types: [published]          # When a GitHub Release is published
   push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
+    tags: ["v*"]                # Or when a version tag is pushed
+  workflow_dispatch: {}         # Manual run
 
 permissions:
-  contents: read
-  pull-requests: write
+  contents: write               # needed to push a sync branch
+  pull-requests: write          # needed to open/update PRs
 
 concurrency:
   group: auto-sync-main-to-dev
   cancel-in-progress: true
 
 jobs:
-  open-sync-pr:
+  prepare:
     runs-on: ubuntu-latest
+    outputs:
+      behind_by: ${{ steps.compare.outputs.behind_by }}
     steps:
-      - name: Compare branches
+      - name: Compare dev…main
         id: compare
         uses: actions/github-script@v7
         with:
           script: |
-            const {owner, repo} = context.repo;
-            const cmp = await github.rest.repos.compareCommits({ owner, repo, base: 'dev', head: 'main' });
-            core.setOutput('behind_by', String(cmp.data.behind_by));
+            const { owner, repo } = context.repo;
+            const r = await github.rest.repos.compareCommits({
+              owner, repo, base: 'dev', head: 'main'
+            });
+            core.setOutput('behind_by', String(r.data.behind_by));
 
-      - name: Open PR if dev is behind
-        if: steps.compare.outputs.behind_by != '0'
+  sync:
+    needs: prepare
+    if: needs.prepare.outputs.behind_by != '0'
+    runs-on: ubuntu-latest
+    env:
+      SYNC_BRANCH: sync/main-to-dev-${{ github.run_id }}
+    steps:
+      - name: Checkout dev (full history)
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: Configure git user
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Create sync branch from dev
+        run: |
+          git fetch origin main dev
+          git switch -c "$SYNC_BRANCH" origin/dev
+
+      - name: Merge main → dev (pre-resolve service-deploy.yml)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          if ! git merge --no-ff --no-edit origin/main; then
+            git checkout --ours .github/workflows/service-deploy.yml || true
+            git add .github/workflows/service-deploy.yml || true
+            git commit -m "sync(main→dev): keep dev copy of service-deploy.yml"
+          fi
+          git push -u origin "$SYNC_BRANCH"
+
+      - name: Open or update PR (→ dev)
+        id: pr
         uses: actions/github-script@v7
         with:
           script: |
-            const {owner, repo} = context.repo;
-            const prs = await github.rest.pulls.list({ owner, repo, state: 'open', base: 'dev', head: `${owner}:main` });
-            if (prs.data.length) {
-              core.notice(`Sync PR already open: #${prs.data[0].number}`);
-              return;
-            }
-            const pr = await github.rest.pulls.create({
-              owner, repo,
-              title: 'chore(sync): main → dev',
-              head: 'main',
-              base: 'dev',
-              body: 'Automated sync of production branch **main** back into **dev** after release.',
+            const { owner, repo } = context.repo;
+            const head = process.env.SYNC_BRANCH;
+            const list = await github.rest.pulls.list({
+              owner, repo, state: 'open', base: 'dev', head: `${owner}:${head}`
             });
-            core.notice(`Opened PR #${pr.data.number}`);
+            let pr;
+            if (list.data.length) {
+              pr = list.data[0];
+            } else {
+              pr = (await github.rest.pulls.create({
+                owner, repo,
+                title: 'chore(sync): main → dev',
+                base: 'dev',
+                head,
+                body: [
+                  'Automated sync of **main** back into **dev** after release.',
+                  '',
+                  '- Pre-resolved `.github/workflows/service-deploy.yml` to keep dev copy.',
+                  '- Merge method: regular **merge** (preserves prod SHAs).'
+                ].join('\n')
+              })).data;
+            }
+            core.setOutput('number', pr.number);
+            core.notice(`Opened/updated PR #${pr.number}`);
+
+      - name: Enable auto-merge (MERGE) if allowed
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const number = Number("${{ steps.pr.outputs.number }}");
+            const q = await github.graphql(
+              `query($owner:String!,$repo:String!,$number:Int!){
+                 repository(owner:$owner,name:$repo){
+                   pullRequest(number:$number){ id }
+                 }
+               }`, { owner, repo, number }
+            );
+            const id = q.repository.pullRequest.id;
+            await github.graphql(
+              `mutation($id:ID!){
+                 enablePullRequestAutoMerge(input:{
+                   pullRequestId:$id, mergeMethod:MERGE
+                 }) { clientMutationId }
+               }`, { id }
+            );
