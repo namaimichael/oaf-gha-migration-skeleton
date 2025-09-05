@@ -1,15 +1,22 @@
 name: release-notes
+
 on:
   push:
     tags: ["v*"]
 
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   generate:
     runs-on: ubuntu-latest
-    permissions: { contents: write }
     steps:
       - uses: actions/checkout@v4
-      - name: Create GitHub Release
+      - name: Create GitHub Release (auto notes)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
