@@ -31,10 +31,8 @@ jobs:
     concurrency:
       group: deploy-dev
       cancel-in-progress: true
-    # environment: dev  # uncomment if you want a dev Environment
 
   # -------- STAGING (2-phase) --------
-  # Phase 1: auto deploy to staging infra (no approval)
   staging-deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
     name: staging-deploy
@@ -51,13 +49,12 @@ jobs:
       group: deploy-staging
       cancel-in-progress: true
 
-  # Phase 2: release gate for staging (approval required)
   staging-release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
     name: staging-release
     needs: staging-deploy
     runs-on: ubuntu-latest
-    environment: staging  # Configure approvals/wait timer in Settings → Environments
+    # environment removed here (now handled inside reusable via env_name)
     permissions:
       contents: read
       id-token: write
@@ -66,7 +63,6 @@ jobs:
       - name: Release switch / post-deploy gate
         run: |
           echo "Releasing the staged build after approval..."
-          # Example operations:
           # helm upgrade --install app deploy/chart --reuse-values --set releaseApproved=true
           # ./scripts/traffic-switch.sh staging
           # curl -f https://staging.example.com/healthz
@@ -79,12 +75,11 @@ jobs:
     with:
       env_name: staging
       image_repo: ${{ vars.IMAGE_REPO }}
-      image_tag: ${{ github.sha }}  # same artifact to enforce true promotion
+      image_tag: ${{ github.sha }}
       chart_path: deploy/chart
     permissions:
       contents: read
       id-token: write
-    environment: staging
     concurrency:
       group: deploy-staging
       cancel-in-progress: true
@@ -102,7 +97,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    environment: production
     concurrency:
       group: deploy-production
       cancel-in-progress: true
