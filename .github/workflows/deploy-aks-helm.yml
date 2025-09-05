@@ -3,52 +3,49 @@ name: _deploy-aks-helm (template)
 on:
   workflow_call:
     inputs:
-      env_name: {type: string, required: true}
-      image_repo: {type: string, required: true}
-      image_tag: {type: string, required: true}
-      chart_path: {type: string, required: true}
+      env_name:
+        type: string
+        required: true
+      image_repo:
+        type: string
+        required: true
+      image_tag:
+        type: string
+        required: true
+      chart_path:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.env_name }}
-
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
-      - name: Helm lint (demo)
-        if: ${{ vars.DEMO_MODE == 'true' }}
-        run: |
-          sudo snap install helm --classic >/dev/null 2>&1 || true
-          helm lint "${{ inputs.chart_path }}" || true
-
-      - name: Helm template (demo)
-        if: ${{ vars.DEMO_MODE == 'true' }}
-        run: |
-          helm template demo "${{ inputs.chart_path }}" \
-            --set image.repository=${{ inputs.image_repo }} \
-            --set image.tag=${{ inputs.image_tag }} \
-            | head -n 60
-
-      - name: Azure login (real)
-        if: ${{ vars.DEMO_MODE != 'true' }}
+      - name: Azure login (OIDC)
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: AKS credentials (real)
-        if: ${{ vars.DEMO_MODE != 'true' }}
-        run: az aks get-credentials -g "$AKS_RG" -n "$AKS_NAME" --overwrite-existing
+      - name: Get AKS credentials
+        run: az aks get-credentials -g "${AKS_RG}" -n "${AKS_NAME}" --overwrite-existing
+        env:
+          AKS_RG:   ${{ vars.AKS_RG }}
+          AKS_NAME: ${{ vars.AKS_NAME }}
 
-      - name: Setup Helm (real)
-        if: ${{ vars.DEMO_MODE != 'true' }}
+      - name: Setup Helm
         uses: Azure/setup-helm@v4
 
-      - name: Helm upgrade/install (real)
-        if: ${{ vars.DEMO_MODE != 'true' }}
-        run: |
-          helm upgrade --install app ${{ inputs.chart_path }} \
-            --set image.repository=${{ inputs.image_repo }} \
-            --set image.tag=${{ inputs.image_tag }}
+      - name: Helm upgrade/install
+        run: >
+          helm upgrade --install app "${{ inputs.chart_path }}"
+          --set image.repository="${{ inputs.image_repo }}"
+          --set image.tag="${{ inputs.image_tag }}"
+          --set env.name="${{ inputs.env_name }}"
