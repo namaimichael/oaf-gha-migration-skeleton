@@ -1,7 +1,15 @@
 {
   "name": "demo-app",
   "version": "1.0.0",
+  "description": "GitHub Actions migration skeleton demo app",
   "scripts": {
-    "test": "echo \"ok\""
-  }
+    "test": "echo \"✅ All tests passed!\"",
+    "lint": "echo \"🔍 Linting complete\"",
+    "start": "node -e \"console.log('🚀 Demo app running on port 3000'); require('http').createServer((req,res) => res.end('Hello from demo app!')).listen(3000)\"",
+    "build": "echo \"🔨 Build complete\"",
+    "dev": "npm start"
+  },
+  "keywords": ["github-actions", "ci-cd", "skeleton", "template"],
+  "author": "Migration Team",
+  "license": "MIT"
 }

@@ -1,5 +1,11 @@
 FROM node:18-alpine
+LABEL org.opencontainers.image.source=https://github.com/namaimichael/oaf-gha-migration-skeleton
+
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --omit=dev || true
-CMD ["node","-e","console.log('hello from demo image')"]
+COPY . .
+
+EXPOSE 3000
+USER node
+
+CMD ["npm", "start"]
