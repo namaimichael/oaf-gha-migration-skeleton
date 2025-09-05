@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: ["dev", "staging", "main"]
 
-# deny-by-default; jobs escalate only if needed
+# deny-by-default; caller job grants only what callee needs
 permissions:
   contents: read
 
@@ -30,12 +30,12 @@ jobs:
             .github/workflows
 
   call-ci-template:
-    # this job name will appear as: service-ci / call-ci-template / ci (pull_request)
+    # appears as: service-ci / call-ci-template / ci (pull_request)
     needs: lint-yaml
     uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/ci-node.yml@main
-    permissions:               # 👈 match what the reusable job requests
+    #  grant only what the reusable needs (intersection applies)
+    permissions:
       contents: read
-      packages: write
-      id-token: write
-      security-events: write
-
+      packages: write   
+      id-token: write    
+      security-events: write  

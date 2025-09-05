@@ -1,116 +1,21 @@
 name: service-deploy
-
 on:
-  push:
-    branches: ["dev", "staging", "main"]
   workflow_dispatch:
     inputs:
       env_name:
         type: choice
-        options: ["dev", "staging", "production"]
-        default: "dev"
+        options: [ "staging", "production" ]
         required: true
-
-permissions:
-  contents: read
+        default: "staging"
 
 jobs:
-  # -------- DEV (auto) --------
-  auto-deploy-dev:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    name: auto-deploy-dev
+  call-deploy-template:
+    permissions:
+      contents: read
+      id-token: write          # needed for az login (real path)
     uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/deploy-aks-helm.yml@main
     with:
-      env_name: dev
+      env_name:  ${{ inputs.env_name }}
       image_repo: ${{ vars.IMAGE_REPO }}
-      image_tag: ${{ github.sha }}
+      image_tag:  ${{ github.run_number }}
       chart_path: deploy/chart
-    permissions:
-      contents: read
-      id-token: write
-    concurrency:
-      group: deploy-dev
-      cancel-in-progress: true
-
-  # -------- STAGING (2-phase) --------
-  staging-deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
-    name: staging-deploy
-    uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/deploy-aks-helm.yml@main
-    with:
-      env_name: staging
-      image_repo: ${{ vars.IMAGE_REPO }}
-      image_tag: ${{ github.sha }}
-      chart_path: deploy/chart
-    permissions:
-      contents: read
-      id-token: write
-    concurrency:
-      group: deploy-staging
-      cancel-in-progress: true
-
-  staging-release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
-    name: staging-release
-    needs: staging-deploy
-    runs-on: ubuntu-latest
-    # environment removed here (now handled inside reusable via env_name)
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-      - name: Release switch / post-deploy gate
-        run: |
-          echo "Releasing the staged build after approval..."
-          # helm upgrade --install app deploy/chart --reuse-values --set releaseApproved=true
-          # ./scripts/traffic-switch.sh staging
-          # curl -f https://staging.example.com/healthz
-
-  # -------- MAIN promotion chain --------
-  promote-to-staging-from-main:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    name: promote-to-staging-from-main
-    uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/deploy-aks-helm.yml@main
-    with:
-      env_name: staging
-      image_repo: ${{ vars.IMAGE_REPO }}
-      image_tag: ${{ github.sha }}
-      chart_path: deploy/chart
-    permissions:
-      contents: read
-      id-token: write
-    concurrency:
-      group: deploy-staging
-      cancel-in-progress: true
-
-  promote-to-production:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    name: promote-to-production
-    needs: promote-to-staging-from-main
-    uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/deploy-aks-helm.yml@main
-    with:
-      env_name: production
-      image_repo: ${{ vars.IMAGE_REPO }}
-      image_tag: ${{ github.sha }}
-      chart_path: deploy/chart
-    permissions:
-      contents: read
-      id-token: write
-    concurrency:
-      group: deploy-production
-      cancel-in-progress: true
-
-  # -------- Manual on-demand deploy --------
-  manual-deploy:
-    if: github.event_name == 'workflow_dispatch'
-    name: manual-deploy
-    uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/deploy-aks-helm.yml@main
-    with:
-      env_name: ${{ inputs.env_name }}
-      image_repo: ${{ vars.IMAGE_REPO }}
-      image_tag: ${{ github.sha }}
-      chart_path: deploy/chart
-    permissions:
-      contents: read
-      id-token: write
