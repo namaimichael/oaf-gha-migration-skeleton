@@ -22,17 +22,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Helm
         uses: Azure/setup-helm@v4
-        
+
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: Deploy with Helm (dry-run)
         run: |
           helm upgrade --install demo-app deploy/chart \
@@ -40,7 +40,7 @@ jobs:
             --set image.tag=${{ inputs.image_tag }} \
             --set env.name=${{ inputs.env_name }} \
             --dry-run --debug
-          
+
       - name: Show deployment info
         run: |
           echo "🎯 Deployment Summary:"
