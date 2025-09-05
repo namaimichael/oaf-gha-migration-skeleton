@@ -6,112 +6,125 @@ on:
   workflow_dispatch:
     inputs:
       env_name:
+        description: "Environment to render for"
         type: choice
         options: ["dev", "staging", "production"]
         default: "dev"
-        required: true
+      image_tag:
+        description: "Image tag to render (defaults to run number)"
+        required: false
 
 permissions:
   contents: read
 
+# Default values used in all jobs (can be overridden via repo VARS)
 env:
-  IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/demo-app
   CHART_PATH: deploy/chart
+  # If you have a repo variable IMAGE_REPO it will be used, otherwise fall back to ghcr.io/<owner>/demo-app
+  IMAGE_REPO: ${{ vars.IMAGE_REPO || format('ghcr.io/{0}/demo-app', github.repository_owner) }}
+  IMAGE_TAG: ${{ github.run_number }}
 
 jobs:
+  # -------- DEV (auto render) --------
   auto-deploy-dev:
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    name: auto-deploy-dev
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: read
     concurrency:
       group: deploy-dev
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
-      - uses: Azure/setup-helm@v4
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Helm upgrade (dry-run)
-        run: |
-          helm upgrade --install demo-app "${{ env.CHART_PATH }}" \
-            --set image.repository="${{ env.IMAGE_REPO }}" \
-            --set image.tag="${{ github.sha }}" \
-            --set env.name=dev \
-            --dry-run --debug
 
+      - name: Setup Helm
+        uses: Azure/setup-helm@v4
+
+      - name: Helm lint
+        run: helm lint "${{ env.CHART_PATH }}"
+
+      - name: Helm render (no cluster)
+        run: |
+          helm template demo-app "${{ env.CHART_PATH }}" \
+            --set image.repository="${{ env.IMAGE_REPO }}" \
+            --set image.tag="${{ env.IMAGE_TAG }}" \
+            --set env.name=dev \
+            --debug
+
+  # -------- STAGING (auto render) --------
   auto-deploy-staging:
     if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    name: auto-deploy-staging
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: read
     concurrency:
       group: deploy-staging
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
-      - uses: Azure/setup-helm@v4
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Helm upgrade (dry-run)
-        run: |
-          helm upgrade --install demo-app "${{ env.CHART_PATH }}" \
-            --set image.repository="${{ env.IMAGE_REPO }}" \
-            --set image.tag="${{ github.sha }}" \
-            --set env.name=staging \
-            --dry-run --debug
 
+      - name: Setup Helm
+        uses: Azure/setup-helm@v4
+
+      - name: Helm lint
+        run: helm lint "${{ env.CHART_PATH }}"
+
+      - name: Helm render (no cluster)
+        run: |
+          helm template demo-app "${{ env.CHART_PATH }}" \
+            --set image.repository="${{ env.IMAGE_REPO }}" \
+            --set image.tag="${{ env.IMAGE_TAG }}" \
+            --set env.name=staging \
+            --debug
+
+  # -------- PRODUCTION (auto render on main) --------
   auto-deploy-production:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    name: auto-deploy-production
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: read
     concurrency:
       group: deploy-production
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
-      - uses: Azure/setup-helm@v4
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Helm upgrade (dry-run)
-        run: |
-          helm upgrade --install demo-app "${{ env.CHART_PATH }}" \
-            --set image.repository="${{ env.IMAGE_REPO }}" \
-            --set image.tag="${{ github.sha }}" \
-            --set env.name=production \
-            --dry-run --debug
 
+      - name: Setup Helm
+        uses: Azure/setup-helm@v4
+
+      - name: Helm lint
+        run: helm lint "${{ env.CHART_PATH }}"
+
+      - name: Helm render (no cluster)
+        run: |
+          helm template demo-app "${{ env.CHART_PATH }}" \
+            --set image.repository="${{ env.IMAGE_REPO }}" \
+            --set image.tag="${{ env.IMAGE_TAG }}" \
+            --set env.name=production \
+            --debug
+
+  # -------- Manual / on-demand render --------
   manual-deploy:
     if: github.event_name == 'workflow_dispatch'
+    name: manual-deploy
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: read
+    concurrency:
+      group: deploy-manual
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
-      - uses: Azure/setup-helm@v4
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Helm upgrade (dry-run)
+
+      - name: Setup Helm
+        uses: Azure/setup-helm@v4
+
+      - name: Helm lint
+        run: helm lint "${{ env.CHART_PATH }}"
+
+      - name: Helm render (no cluster)
+        env:
+          TARGET_ENV: ${{ inputs.env_name }}
+          TARGET_TAG: ${{ inputs.image_tag || env.IMAGE_TAG }}
         run: |
-          helm upgrade --install demo-app "${{ env.CHART_PATH }}" \
+          echo "Rendering for env=${TARGET_ENV}, tag=${TARGET_TAG}"
+          helm template demo-app "${{ env.CHART_PATH }}" \
             --set image.repository="${{ env.IMAGE_REPO }}" \
-            --set image.tag="${{ github.sha }}" \
-            --set env.name="${{ inputs.env_name }}" \
-            --dry-run --debug
+            --set image.tag="${TARGET_TAG}" \
+            --set env.name="${TARGET_ENV}" \
+            --debug
