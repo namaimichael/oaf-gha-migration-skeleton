@@ -1,149 +1,133 @@
-name: service-deploy
+name: Auto sync main → staging & dev
 
 on:
+  release:
+    types: [published]          # When a GitHub Release is published
   push:
-    branches: ["dev", "staging", "main"]
-  workflow_dispatch:
-    inputs:
-      env_name:
-        description: "Target environment"
-        type: choice
-        options: ["dev", "staging", "production"]
-        required: true
-        default: "dev"
-      image_tag:
-        description: "Image tag (defaults to run number)"
-        required: false
-        default: ""
+    tags: ["v*"]                # Or when a version tag is pushed
+  workflow_dispatch: {}         # Manual run
 
 permissions:
-  contents: read
+  contents: write               # push sync branches
+  pull-requests: write          # open/update PRs
 
-# ---------------------- DEV (auto) ----------------------
+concurrency:
+  group: auto-sync-main-to-branches
+  cancel-in-progress: true
+
 jobs:
-  auto-deploy-dev:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    name: auto-deploy-dev
+  sync:
     runs-on: ubuntu-latest
-    concurrency:
-      group: deploy-dev
-      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [staging, dev]
+
+    env:
+      SYNC_BRANCH: sync/main-to-${{ matrix.target }}-${{ github.run_id }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Compare ${{ matrix.target }}…main
+        id: cmp
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const r = await github.rest.repos.compareCommits({
+              owner, repo, base: '${{ matrix.target }}', head: 'main'
+            });
+            core.setOutput('behind_by', String(r.data.behind_by));
 
-      - name: Setup Helm
-        uses: Azure/setup-helm@v4
+      - name: Stop early if ${{ matrix.target }} is up to date
+        if: steps.cmp.outputs.behind_by == '0'
+        run: echo "${{ matrix.target }} is already up to date."
 
-      - name: Helm lint
-        run: helm lint deploy/chart
+      - name: Checkout ${{ matrix.target }} (full history)
+        if: steps.cmp.outputs.behind_by != '0'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.target }}
+          fetch-depth: 0
 
-      - name: Render manifests (dev)
-        env:
-          IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/demo-app
-          IMAGE_TAG: ${{ github.run_number }}
+      - name: Configure git user
+        if: steps.cmp.outputs.behind_by != '0'
         run: |
-          echo "IMAGE: $IMAGE_REPO:$IMAGE_TAG"
-          helm template demo-app deploy/chart \
-            --set image.repository="$IMAGE_REPO" \
-            --set image.tag="$IMAGE_TAG" \
-            --set env.name=dev \
-            --debug
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-# ------------------- STAGING (gated) --------------------
-  staging-deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
-    name: staging-deploy
-    runs-on: ubuntu-latest
-    environment: staging        # <-- Configure approvals in Settings → Environments → staging
-    concurrency:
-      group: deploy-staging
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Helm
-        uses: Azure/setup-helm@v4
-
-      - name: Helm lint
-        run: helm lint deploy/chart
-
-      - name: Render manifests (staging)
-        env:
-          IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/demo-app
-          IMAGE_TAG: ${{ github.run_number }}
+      - name: Create sync branch from ${{ matrix.target }}
+        if: steps.cmp.outputs.behind_by != '0'
         run: |
-          echo "IMAGE: $IMAGE_REPO:$IMAGE_TAG"
-          helm template demo-app deploy/chart \
-            --set image.repository="$IMAGE_REPO" \
-            --set image.tag="$IMAGE_TAG" \
-            --set env.name=staging \
-            --debug
+          git fetch origin main ${{ matrix.target }}
+          git switch -c "$SYNC_BRANCH" "origin/${{ matrix.target }}"
 
-# ------------------- PRODUCTION (gated) -----------------
-  production-deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    name: production-deploy
-    runs-on: ubuntu-latest
-    environment: production     # <-- Configure approvals in Settings → Environments → production
-    concurrency:
-      group: deploy-production
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Helm
-        uses: Azure/setup-helm@v4
-
-      - name: Helm lint
-        run: helm lint deploy/chart
-
-      - name: Render manifests (production)
-        env:
-          IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/demo-app
-          IMAGE_TAG: ${{ github.run_number }}
+      - name: Merge main → ${{ matrix.target }} (keep target’s service-deploy.yml)
+        if: steps.cmp.outputs.behind_by != '0'
+        shell: bash
         run: |
-          echo "IMAGE: $IMAGE_REPO:$IMAGE_TAG"
-          helm template demo-app deploy/chart \
-            --set image.repository="$IMAGE_REPO" \
-            --set image.tag="$IMAGE_TAG" \
-            --set env.name=production \
-            --debug
-
-# ------------------- Manual on-demand run ----------------
-  manual-deploy:
-    if: github.event_name == 'workflow_dispatch'
-    name: manual-deploy
-    runs-on: ubuntu-latest
-    # Attach to the chosen environment so staging/prod approvals apply on manual runs too
-    environment: ${{ inputs.env_name }}
-    concurrency:
-      group: deploy-${{ inputs.env_name }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Helm
-        uses: Azure/setup-helm@v4
-
-      - name: Helm lint
-        run: helm lint deploy/chart
-
-      - name: Compute image tag
-        id: tag
-        run: |
-          if [ -n "${{ inputs.image_tag }}" ]; then
-            echo "IMAGE_TAG=${{ inputs.image_tag }}" >> "$GITHUB_ENV"
-          else
-            echo "IMAGE_TAG=${{ github.run_number }}" >> "$GITHUB_ENV"
+          set -euxo pipefail
+          if ! git merge --no-ff --no-edit origin/main; then
+            git checkout --ours .github/workflows/service-deploy.yml || true
+            git add .github/workflows/service-deploy.yml || true
+            git commit -m "sync(main→${{ matrix.target }}): keep ${{ matrix.target }} copy of service-deploy.yml"
           fi
+          git push -u origin "$SYNC_BRANCH"
 
-      - name: Render manifests (${{ inputs.env_name }})
-        env:
-          IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/demo-app
-        run: |
-          echo "IMAGE: $IMAGE_REPO:$IMAGE_TAG"
-          helm template demo-app deploy/chart \
-            --set image.repository="$IMAGE_REPO" \
-            --set image.tag="$IMAGE_TAG" \
-            --set env.name=${{ inputs.env_name }} \
-            --debug
+      - name: Open or update PR (→ ${{ matrix.target }})
+        if: steps.cmp.outputs.behind_by != '0'
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const head = process.env.SYNC_BRANCH;
+            const base = '${{ matrix.target }}';
+
+            const list = await github.rest.pulls.list({
+              owner, repo, state: 'open', base, head: `${owner}:${head}`
+            });
+
+            let pr;
+            if (list.data.length) {
+              pr = list.data[0];
+            } else {
+              pr = (await github.rest.pulls.create({
+                owner, repo,
+                title: `chore(sync): main → ${base}`,
+                base,
+                head,
+                body: [
+                  `Automated sync of **main** back into **${base}** after release.`,
+                  '',
+                  '- Pre-resolved `.github/workflows/service-deploy.yml` to keep the target branch copy.',
+                  '- Merge method: regular **merge** to preserve production SHAs.'
+                ].join('\n')
+              })).data;
+            }
+            core.setOutput('number', pr.number);
+            core.notice(`Opened/updated PR #${pr.number} → ${base}`);
+
+      # Dev can be auto-merged, staging should remain review-gated
+      - name: Enable auto-merge (MERGE) for dev only
+        if: matrix.target == 'dev' && steps.cmp.outputs.behind_by != '0'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const number = Number("${{ steps.pr.outputs.number }}");
+            const q = await github.graphql(
+              `query($owner:String!,$repo:String!,$number:Int!){
+                 repository(owner:$owner,name:$repo){
+                   pullRequest(number:$number){ id }
+                 }
+               }`, { owner, repo, number }
+            );
+            const id = q.repository.pullRequest.id;
+            await github.graphql(
+              `mutation($id:ID!){
+                 enablePullRequestAutoMerge(input:{
+                   pullRequestId:$id, mergeMethod:MERGE
+                 }) { clientMutationId }
+               }`, { id }
+            );
