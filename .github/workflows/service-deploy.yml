@@ -19,7 +19,7 @@ jobs:
   auto-deploy-dev:
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     name: auto-deploy-dev
-    uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/deploy-aks-helm.yml@main
+    uses: .github/workflows/deploy-demo.yml
     with:
       env_name: dev
       image_repo: ${{ vars.IMAGE_REPO }}
@@ -27,7 +27,6 @@ jobs:
       chart_path: deploy/chart
     permissions:
       contents: read
-      id-token: write
     concurrency:
       group: deploy-dev
       cancel-in-progress: true
@@ -36,7 +35,7 @@ jobs:
   staging-deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
     name: staging-deploy
-    uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/deploy-aks-helm.yml@main
+    uses: .github/workflows/deploy-demo.yml
     with:
       env_name: staging
       image_repo: ${{ vars.IMAGE_REPO }}
@@ -44,7 +43,6 @@ jobs:
       chart_path: deploy/chart
     permissions:
       contents: read
-      id-token: write
     concurrency:
       group: deploy-staging
       cancel-in-progress: true
@@ -57,7 +55,6 @@ jobs:
     # environment removed here (now handled inside reusable via env_name)
     permissions:
       contents: read
-      id-token: write
     steps:
       - uses: actions/checkout@v4
       - name: Release switch / post-deploy gate
@@ -71,7 +68,7 @@ jobs:
   promote-to-staging-from-main:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     name: promote-to-staging-from-main
-    uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/deploy-aks-helm.yml@main
+    uses: .github/workflows/deploy-demo.yml
     with:
       env_name: staging
       image_repo: ${{ vars.IMAGE_REPO }}
@@ -79,7 +76,6 @@ jobs:
       chart_path: deploy/chart
     permissions:
       contents: read
-      id-token: write
     concurrency:
       group: deploy-staging
       cancel-in-progress: true
@@ -88,7 +84,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     name: promote-to-production
     needs: promote-to-staging-from-main
-    uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/deploy-aks-helm.yml@main
+    uses: .github/workflows/deploy-demo.yml
     with:
       env_name: production
       image_repo: ${{ vars.IMAGE_REPO }}
@@ -96,7 +92,6 @@ jobs:
       chart_path: deploy/chart
     permissions:
       contents: read
-      id-token: write
     concurrency:
       group: deploy-production
       cancel-in-progress: true
@@ -105,7 +100,7 @@ jobs:
   manual-deploy:
     if: github.event_name == 'workflow_dispatch'
     name: manual-deploy
-    uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/deploy-aks-helm.yml@main
+    uses: .github/workflows/deploy-demo.yml
     with:
       env_name: ${{ inputs.env_name }}
       image_repo: ${{ vars.IMAGE_REPO }}
@@ -113,4 +108,3 @@ jobs:
       chart_path: deploy/chart
     permissions:
       contents: read
-      id-token: write
