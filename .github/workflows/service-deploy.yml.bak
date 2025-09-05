@@ -1,0 +1,110 @@
+name: service-deploy
+
+on:
+  push:
+    branches: ["dev", "staging", "main"]
+  workflow_dispatch:
+    inputs:
+      env_name:
+        type: choice
+        options: ["dev", "staging", "production"]
+        default: "dev"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  # -------- DEV (auto) --------
+  auto-deploy-dev:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    name: auto-deploy-dev
+    uses: /.github/workflows/deploy-demo.yml@chore/update-service-deploy
+    with:
+      env_name: dev
+      image_repo: ${{ vars.IMAGE_REPO }}
+      image_tag: ${{ github.sha }}
+      chart_path: deploy/chart
+    permissions:
+      contents: read
+    concurrency:
+      group: deploy-dev
+      cancel-in-progress: true
+
+  # -------- STAGING (2-phase) --------
+  staging-deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    name: staging-deploy
+    uses: /.github/workflows/deploy-demo.yml@chore/update-service-deploy
+    with:
+      env_name: staging
+      image_repo: ${{ vars.IMAGE_REPO }}
+      image_tag: ${{ github.sha }}
+      chart_path: deploy/chart
+    permissions:
+      contents: read
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: true
+
+  staging-release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    name: staging-release
+    needs: staging-deploy
+    runs-on: ubuntu-latest
+    # environment removed here (now handled inside reusable via env_name)
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Release switch / post-deploy gate
+        run: |
+          echo "Releasing the staged build after approval..."
+          # helm upgrade --install app deploy/chart --reuse-values --set releaseApproved=true
+          # ./scripts/traffic-switch.sh staging
+          # curl -f https://staging.example.com/healthz
+
+  # -------- MAIN promotion chain --------
+  promote-to-staging-from-main:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    name: promote-to-staging-from-main
+    uses: /.github/workflows/deploy-demo.yml@chore/update-service-deploy
+    with:
+      env_name: staging
+      image_repo: ${{ vars.IMAGE_REPO }}
+      image_tag: ${{ github.sha }}
+      chart_path: deploy/chart
+    permissions:
+      contents: read
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: true
+
+  promote-to-production:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    name: promote-to-production
+    needs: promote-to-staging-from-main
+    uses: /.github/workflows/deploy-demo.yml@chore/update-service-deploy
+    with:
+      env_name: production
+      image_repo: ${{ vars.IMAGE_REPO }}
+      image_tag: ${{ github.sha }}
+      chart_path: deploy/chart
+    permissions:
+      contents: read
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: true
+
+  # -------- Manual on-demand deploy --------
+  manual-deploy:
+    if: github.event_name == 'workflow_dispatch'
+    name: manual-deploy
+    uses: /.github/workflows/deploy-demo.yml@chore/update-service-deploy
+    with:
+      env_name: ${{ inputs.env_name }}
+      image_repo: ${{ vars.IMAGE_REPO }}
+      image_tag: ${{ github.sha }}
+      chart_path: deploy/chart
+    permissions:
+      contents: read
