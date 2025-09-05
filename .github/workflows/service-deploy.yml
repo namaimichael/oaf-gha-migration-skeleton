@@ -2,13 +2,13 @@ name: service-deploy
 
 on:
   push:
-    branches: ["dev", "staging", "main"]
+    branches: [ "dev", "staging", "main" ]
   workflow_dispatch:
     inputs:
       env_name:
         description: "Environment to render for"
         type: choice
-        options: ["dev", "staging", "production"]
+        options: [ "dev", "staging", "production" ]
         default: "dev"
       image_tag:
         description: "Image tag to render (defaults to run number)"
@@ -17,114 +17,83 @@ on:
 permissions:
   contents: read
 
-# Default values used in all jobs (can be overridden via repo VARS)
+concurrency:
+  group: service-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CHART_PATH: deploy/chart
-  # If you have a repo variable IMAGE_REPO it will be used, otherwise fall back to ghcr.io/<owner>/demo-app
-  IMAGE_REPO: ${{ vars.IMAGE_REPO || format('ghcr.io/{0}/demo-app', github.repository_owner) }}
-  IMAGE_TAG: ${{ github.run_number }}
+  IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/demo-app
+  IMAGE_TAG: ${{ inputs.image_tag || github.run_number }}
 
 jobs:
-  # -------- DEV (auto render) --------
+  # -------- DEV (no approval gate) --------
   auto-deploy-dev:
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    name: auto-deploy-dev
     runs-on: ubuntu-latest
-    concurrency:
-      group: deploy-dev
-      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Helm
-        uses: Azure/setup-helm@v4
-
-      - name: Helm lint
-        run: helm lint "${{ env.CHART_PATH }}"
-
-      - name: Helm render (no cluster)
+      - uses: Azure/setup-helm@v4
+      - name: Helm lint (dev)
+        run: helm lint $CHART_PATH
+      - name: Helm template (dev / dry-run)
         run: |
-          helm template demo-app "${{ env.CHART_PATH }}" \
-            --set image.repository="${{ env.IMAGE_REPO }}" \
-            --set image.tag="${{ env.IMAGE_TAG }}" \
+          helm template demo-app $CHART_PATH \
+            --set image.repository=$IMAGE_REPO \
+            --set image.tag=${{ github.run_number }} \
             --set env.name=dev \
             --debug
 
-  # -------- STAGING (auto render) --------
+  # -------- STAGING (approval gate via Environment) --------
   auto-deploy-staging:
     if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
-    name: auto-deploy-staging
     runs-on: ubuntu-latest
-    concurrency:
-      group: deploy-staging
-      cancel-in-progress: true
+    environment: staging           # <-- requires approval before job starts
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Helm
-        uses: Azure/setup-helm@v4
-
-      - name: Helm lint
-        run: helm lint "${{ env.CHART_PATH }}"
-
-      - name: Helm render (no cluster)
+      - uses: Azure/setup-helm@v4
+      - name: Helm lint (staging)
+        run: helm lint $CHART_PATH
+      - name: Helm template (staging / dry-run)
         run: |
-          helm template demo-app "${{ env.CHART_PATH }}" \
-            --set image.repository="${{ env.IMAGE_REPO }}" \
-            --set image.tag="${{ env.IMAGE_TAG }}" \
+          helm template demo-app $CHART_PATH \
+            --set image.repository=$IMAGE_REPO \
+            --set image.tag=${{ github.run_number }} \
             --set env.name=staging \
             --debug
 
-  # -------- PRODUCTION (auto render on main) --------
+  # -------- PRODUCTION (approval gate via Environment) --------
   auto-deploy-production:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    name: auto-deploy-production
     runs-on: ubuntu-latest
-    concurrency:
-      group: deploy-production
-      cancel-in-progress: true
+    environment: production        # <-- requires approval before job starts
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Helm
-        uses: Azure/setup-helm@v4
-
-      - name: Helm lint
-        run: helm lint "${{ env.CHART_PATH }}"
-
-      - name: Helm render (no cluster)
+      - uses: Azure/setup-helm@v4
+      - name: Helm lint (prod)
+        run: helm lint $CHART_PATH
+      - name: Helm template (prod / dry-run)
         run: |
-          helm template demo-app "${{ env.CHART_PATH }}" \
-            --set image.repository="${{ env.IMAGE_REPO }}" \
-            --set image.tag="${{ env.IMAGE_TAG }}" \
+          helm template demo-app $CHART_PATH \
+            --set image.repository=$IMAGE_REPO \
+            --set image.tag=${{ github.run_number }} \
             --set env.name=production \
             --debug
 
-  # -------- Manual / on-demand render --------
+  # -------- Manual on-demand render (inherits env gates) --------
   manual-deploy:
     if: github.event_name == 'workflow_dispatch'
-    name: manual-deploy
     runs-on: ubuntu-latest
-    concurrency:
-      group: deploy-manual
-      cancel-in-progress: true
+    environment: ${{ inputs.env_name }}   # staging/prod will prompt approval
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Helm
-        uses: Azure/setup-helm@v4
-
-      - name: Helm lint
-        run: helm lint "${{ env.CHART_PATH }}"
-
-      - name: Helm render (no cluster)
-        env:
-          TARGET_ENV: ${{ inputs.env_name }}
-          TARGET_TAG: ${{ inputs.image_tag || env.IMAGE_TAG }}
+      - uses: Azure/setup-helm@v4
+      - name: Helm lint (${{ inputs.env_name }})
+        run: helm lint $CHART_PATH
+      - name: Helm template (${{ inputs.env_name }} / dry-run)
         run: |
-          echo "Rendering for env=${TARGET_ENV}, tag=${TARGET_TAG}"
-          helm template demo-app "${{ env.CHART_PATH }}" \
-            --set image.repository="${{ env.IMAGE_REPO }}" \
-            --set image.tag="${TARGET_TAG}" \
-            --set env.name="${TARGET_ENV}" \
+          helm template demo-app $CHART_PATH \
+            --set image.repository=$IMAGE_REPO \
+            --set image.tag=$IMAGE_TAG \
+            --set env.name=${{ inputs.env_name }} \
             --debug
