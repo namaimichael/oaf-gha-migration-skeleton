@@ -1,0 +1,99 @@
+name: service-deploy
+
+on:
+  push:
+    branches: [ "dev", "staging", "main" ]
+  workflow_dispatch:
+    inputs:
+      env_name:
+        description: "Environment to render for"
+        type: choice
+        options: [ "dev", "staging", "production" ]
+        default: "dev"
+      image_tag:
+        description: "Image tag to render (defaults to run number)"
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: service-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CHART_PATH: deploy/chart
+  IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/demo-app
+  IMAGE_TAG: ${{ inputs.image_tag || github.run_number }}
+
+jobs:
+  # -------- DEV (no approval gate) --------
+  auto-deploy-dev:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Azure/setup-helm@v4
+      - name: Helm lint (dev)
+        run: helm lint $CHART_PATH
+      - name: Helm template (dev / dry-run)
+        run: |
+          helm template demo-app $CHART_PATH \
+            --set image.repository=$IMAGE_REPO \
+            --set image.tag=${{ github.run_number }} \
+            --set env.name=dev \
+            --debug
+
+  # -------- STAGING (approval gate via Environment) --------
+  auto-deploy-staging:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    runs-on: ubuntu-latest
+    environment: staging           # <-- requires approval before job starts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Azure/setup-helm@v4
+      - name: Helm lint (staging)
+        run: helm lint $CHART_PATH
+      - name: Helm template (staging / dry-run)
+        run: |
+          helm template demo-app $CHART_PATH \
+            --set image.repository=$IMAGE_REPO \
+            --set image.tag=${{ github.run_number }} \
+            --set env.name=staging \
+            --debug
+
+  # -------- PRODUCTION (approval gate via Environment) --------
+  auto-deploy-production:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production        # <-- requires approval before job starts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Azure/setup-helm@v4
+      - name: Helm lint (prod)
+        run: helm lint $CHART_PATH
+      - name: Helm template (prod / dry-run)
+        run: |
+          helm template demo-app $CHART_PATH \
+            --set image.repository=$IMAGE_REPO \
+            --set image.tag=${{ github.run_number }} \
+            --set env.name=production \
+            --debug
+
+  # -------- Manual on-demand render (inherits env gates) --------
+  manual-deploy:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.env_name }}   # staging/prod will prompt approval
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Azure/setup-helm@v4
+      - name: Helm lint (${{ inputs.env_name }})
+        run: helm lint $CHART_PATH
+      - name: Helm template (${{ inputs.env_name }} / dry-run)
+        run: |
+          helm template demo-app $CHART_PATH \
+            --set image.repository=$IMAGE_REPO \
+            --set image.tag=$IMAGE_TAG \
+            --set env.name=${{ inputs.env_name }} \
+            --debug
