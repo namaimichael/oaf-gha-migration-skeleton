@@ -1,0 +1,149 @@
+name: service-deploy
+
+on:
+  push:
+    branches: ["dev", "staging", "main"]
+  workflow_dispatch:
+    inputs:
+      env_name:
+        description: "Target environment"
+        type: choice
+        options: ["dev", "staging", "production"]
+        required: true
+        default: "dev"
+      image_tag:
+        description: "Image tag (defaults to run number)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+# ---------------------- DEV (auto) ----------------------
+jobs:
+  auto-deploy-dev:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    name: auto-deploy-dev
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-dev
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: Azure/setup-helm@v4
+
+      - name: Helm lint
+        run: helm lint deploy/chart
+
+      - name: Render manifests (dev)
+        env:
+          IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/demo-app
+          IMAGE_TAG: ${{ github.run_number }}
+        run: |
+          echo "IMAGE: $IMAGE_REPO:$IMAGE_TAG"
+          helm template demo-app deploy/chart \
+            --set image.repository="$IMAGE_REPO" \
+            --set image.tag="$IMAGE_TAG" \
+            --set env.name=dev \
+            --debug
+
+# ------------------- STAGING (gated) --------------------
+  staging-deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    name: staging-deploy
+    runs-on: ubuntu-latest
+    environment: staging        # <-- Configure approvals in Settings → Environments → staging
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: Azure/setup-helm@v4
+
+      - name: Helm lint
+        run: helm lint deploy/chart
+
+      - name: Render manifests (staging)
+        env:
+          IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/demo-app
+          IMAGE_TAG: ${{ github.run_number }}
+        run: |
+          echo "IMAGE: $IMAGE_REPO:$IMAGE_TAG"
+          helm template demo-app deploy/chart \
+            --set image.repository="$IMAGE_REPO" \
+            --set image.tag="$IMAGE_TAG" \
+            --set env.name=staging \
+            --debug
+
+# ------------------- PRODUCTION (gated) -----------------
+  production-deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    name: production-deploy
+    runs-on: ubuntu-latest
+    environment: production     # <-- Configure approvals in Settings → Environments → production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: Azure/setup-helm@v4
+
+      - name: Helm lint
+        run: helm lint deploy/chart
+
+      - name: Render manifests (production)
+        env:
+          IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/demo-app
+          IMAGE_TAG: ${{ github.run_number }}
+        run: |
+          echo "IMAGE: $IMAGE_REPO:$IMAGE_TAG"
+          helm template demo-app deploy/chart \
+            --set image.repository="$IMAGE_REPO" \
+            --set image.tag="$IMAGE_TAG" \
+            --set env.name=production \
+            --debug
+
+# ------------------- Manual on-demand run ----------------
+  manual-deploy:
+    if: github.event_name == 'workflow_dispatch'
+    name: manual-deploy
+    runs-on: ubuntu-latest
+    # Attach to the chosen environment so staging/prod approvals apply on manual runs too
+    environment: ${{ inputs.env_name }}
+    concurrency:
+      group: deploy-${{ inputs.env_name }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: Azure/setup-helm@v4
+
+      - name: Helm lint
+        run: helm lint deploy/chart
+
+      - name: Compute image tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            echo "IMAGE_TAG=${{ inputs.image_tag }}" >> "$GITHUB_ENV"
+          else
+            echo "IMAGE_TAG=${{ github.run_number }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Render manifests (${{ inputs.env_name }})
+        env:
+          IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/demo-app
+        run: |
+          echo "IMAGE: $IMAGE_REPO:$IMAGE_TAG"
+          helm template demo-app deploy/chart \
+            --set image.repository="$IMAGE_REPO" \
+            --set image.tag="$IMAGE_TAG" \
+            --set env.name=${{ inputs.env_name }} \
+            --debug
