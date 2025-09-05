@@ -5,7 +5,7 @@ on:
     types: [published]
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -24,3 +24,25 @@ jobs:
         id: compare
         uses: actions/github-script@v7
         with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const cmp = await github.rest.repos.compareCommits({
+              owner, repo, base: "dev", head: "main"
+            });
+            core.setOutput("behind_by", cmp.data.behind_by);
+
+      - name: Create sync PR if needed
+        if: steps.compare.outputs.behind_by != "0"
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            await github.rest.pulls.create({
+              owner, repo,
+              title: "chore(sync): main → dev",
+              head: "main",
+              base: "dev",
+              body: "Automated sync after release"
+            });
