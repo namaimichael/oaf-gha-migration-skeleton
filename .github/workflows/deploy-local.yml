@@ -1,0 +1,25 @@
+name: deploy-local
+
+on:
+  workflow_dispatch:
+    inputs:
+      env_name:
+        description: "Environment"
+        type: choice
+        options: ["dev", "staging", "production"]
+        default: "dev"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Helm
+        uses: Azure/setup-helm@v4
+        
+      - name: Simulate deployment
+        run: |
+          echo "Deploying to ${{ inputs.env_name }}"
+          helm template demo-app deploy/chart --dry-run
+          echo "Deployment simulation successful"

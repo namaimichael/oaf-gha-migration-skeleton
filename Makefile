@@ -1,14 +1,42 @@
-SERVICE ?= app
+SERVICE ?= demo-app
 TAG ?= dev
+REGISTRY ?= ghcr.io
+OWNER ?= $(shell git config user.name | tr "[:upper:]" "[:lower:]" | tr " " "-")
 
-parity:
-	@echo "== Comparing image digests (ACR vs GHCR) =="
-	crane digest $${ACR_NAME}.azurecr.io/$(SERVICE):$(TAG) > .acr.digest
-	crane digest ghcr.io/$${GITHUB_OWNER}/$(SERVICE):$(TAG) > .ghcr.digest
-	diff .acr.digest .ghcr.digest && echo "Digests match" || (echo "Digest mismatch"; exit 1)
+.PHONY: build push test lint deploy-local clean
 
-demo-parity:
-	@echo "== DEMO parity (fake matching digests) =="
-	echo sha256:deadbeef > .acr.digest
-	echo sha256:deadbeef > .ghcr.digest
-	diff .acr.digest .ghcr.digest && echo "Digests match (demo)" || (echo "Digest mismatch"; exit 1)
+# Build container locally
+build:
+	docker build -t $(REGISTRY)/$(OWNER)/$(SERVICE):$(TAG) .
+
+# Push to GHCR (requires: echo $$GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin)
+push: build
+	docker push $(REGISTRY)/$(OWNER)/$(SERVICE):$(TAG)
+
+# Run tests
+test:
+	npm test
+
+# Lint workflows
+lint:
+	yamllint .github/workflows/
+
+# Deploy locally with Helm (dry-run)
+deploy-local:
+	helm upgrade --install $(SERVICE) deploy/chart \
+	  --set image.repository=$(REGISTRY)/$(OWNER)/$(SERVICE) \
+	  --set image.tag=$(TAG) \
+	  --set env.name=local \
+	  --dry-run --debug
+
+# Clean up local images
+clean:
+	docker rmi $(REGISTRY)/$(OWNER)/$(SERVICE):$(TAG) || true
+
+# Show current config
+info:
+	@echo "Service: $(SERVICE)"
+	@echo "Tag: $(TAG)"
+	@echo "Registry: $(REGISTRY)"
+	@echo "Owner: $(OWNER)"
+	@echo "Full image: $(REGISTRY)/$(OWNER)/$(SERVICE):$(TAG)"

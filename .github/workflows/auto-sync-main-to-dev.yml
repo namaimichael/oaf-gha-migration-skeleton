@@ -1,0 +1,17 @@
+name: Auto sync main to dev
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync notification
+        run: |
+          echo "Manual sync workflow triggered"
+          echo "This would create a PR from main to dev in a real scenario"
