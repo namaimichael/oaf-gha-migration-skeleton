@@ -3,8 +3,9 @@ name: service-ci
 on:
   pull_request:
     branches: ["dev", "staging", "main"]
+  push:
+    branches: ["dev", "staging", "main"]
 
-# deny-by-default; caller job grants only what callee needs
 permissions:
   contents: read
 
@@ -26,16 +27,12 @@ jobs:
       - name: Strict syntax sanity
         run: |
           yamllint -f parsable \
-            -d '{rules:{document-start: disable, line-length: disable, truthy: disable, comments: disable, indentation:{indent-sequences: consistent}}}' \
+            -d "{rules:{document-start: disable, line-length: disable, truthy: disable, comments: disable, indentation:{indent-sequences: consistent}}}" \
             .github/workflows
 
   call-ci-template:
-    # appears as: service-ci / call-ci-template / ci (pull_request)
     needs: lint-yaml
-    uses: namaimichael/oaf-gha-migration-skeleton/.github/workflows/ci-node.yml@main
-    #  grant only what the reusable needs (intersection applies)
+    uses: ./.github/workflows/_ci-node.yml
     permissions:
       contents: read
-      packages: write   
-      id-token: write    
-      security-events: write  
+      packages: write
